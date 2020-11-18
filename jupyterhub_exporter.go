@@ -50,6 +50,7 @@ func APIRequest(url string, headers map[string]string) (result []byte, err error
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
+		log.Println(err)
 		return
 	}
 
@@ -60,6 +61,7 @@ func APIRequest(url string, headers map[string]string) (result []byte, err error
 	client := &http.Client{Transport: customTransport}
 	res, err := client.Do(req)
 	if err != nil {
+		log.Println(err)
 		return
 	}
 	defer res.Body.Close()
@@ -92,6 +94,8 @@ func (cc *myCollector) GetActiveUser() (
 				activeUsers[user.Name] = t.UnixNano()
 			}
 		}
+	} else {
+		log.Println(err)
 	}
 
 	return
@@ -99,7 +103,6 @@ func (cc *myCollector) GetActiveUser() (
 
 func (cc myCollector) Collect(ch chan<- prometheus.Metric) {
 	activeUsers := cc.GetActiveUser()
-	log.Println(activeUsers)
 
 	for userName, lastActivity := range activeUsers {
 		ch <- prometheus.MustNewConstMetric(
