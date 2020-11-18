@@ -99,6 +99,7 @@ func (cc *myCollector) GetActiveUser() (
 
 func (cc myCollector) Collect(ch chan<- prometheus.Metric) {
 	activeUsers := cc.GetActiveUser()
+	log.Println(activeUsers)
 
 	for userName, lastActivity := range activeUsers {
 		ch <- prometheus.MustNewConstMetric(
@@ -128,5 +129,6 @@ func main() {
 			</body>
 			</html>`))
 	})
+	log.Println("start server")
 	log.Fatal(http.ListenAndServe(":9225", nil))
 }
