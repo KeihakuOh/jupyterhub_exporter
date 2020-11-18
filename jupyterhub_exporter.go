@@ -123,6 +123,7 @@ func main() {
 			<head><title>Jupyterhub Exporter</title></head>
 			<body>
 			<h1>Jupyterhub Exporter</h1>
+			<h2>v1.1</h2>
 			<p><a href="` + metricsPath + `">Metrics</a></p>
 			</body>
 			</html>`))
