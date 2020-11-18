@@ -50,7 +50,6 @@ func APIRequest(url string, headers map[string]string) (result []byte, err error
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		log.Println(err)
 		return
 	}
 
@@ -61,7 +60,6 @@ func APIRequest(url string, headers map[string]string) (result []byte, err error
 	client := &http.Client{Transport: customTransport}
 	res, err := client.Do(req)
 	if err != nil {
-		log.Println(err)
 		return
 	}
 	defer res.Body.Close()
@@ -81,7 +79,12 @@ func (cc *myCollector) GetActiveUser() (
 		"Authorization": "token " + *apiToken,
 	}
 
-	resBody, _ := APIRequest(*apiHost+"/users", headers)
+	resBody, apiErr := APIRequest(*apiHost+"/users", headers)
+
+	if apiErr != nil {
+		log.Println(apiErr)
+		return
+	}
 
 	var resJSON = ResponseJSON{}
 	err := json.Unmarshal(resBody, &resJSON)
