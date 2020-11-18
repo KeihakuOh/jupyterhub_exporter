@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"flag"
 	"io/ioutil"
@@ -20,7 +21,7 @@ type ResponseJSON []struct {
 }
 
 var (
-	apiHost  = flag.String("host", "http://localhost:8888/hub/api", "API host")
+	apiHost  = flag.String("host", "https://localhost/hub/api", "API host")
 	willStop = flag.Bool("stop", true, "stop single server")
 	apiToken = flag.String("token", "", "jupyterhub token (admin)")
 	waitHour = flag.Int("hours", 24, "hours to wait for stop server")
@@ -44,6 +45,9 @@ var (
 
 // APIRequest is to get response for api request with http-headers
 func APIRequest(url string, headers map[string]string) (result []byte, err error) {
+	customTransport := &(*http.DefaultTransport.(*http.Transport)) // make shallow copy
+	customTransport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return
@@ -53,7 +57,7 @@ func APIRequest(url string, headers map[string]string) (result []byte, err error
 		req.Header.Set(key, value)
 	}
 
-	client := new(http.Client)
+	client := &http.Client{Transport: customTransport}
 	res, err := client.Do(req)
 	if err != nil {
 		return
