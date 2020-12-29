@@ -24,7 +24,7 @@ var (
 	apiHost  = flag.String("host", "https://localhost/hub/api", "API host")
 	willStop = flag.Bool("stop", true, "stop single server")
 	apiToken = flag.String("token", "", "jupyterhub token (admin)")
-	waitHour = flag.Int("hours", 24, "hours to wait for stop server")
+	waitHour = flag.Int64("hours", 24, "hours to wait for stop server")
 )
 
 const (
@@ -44,11 +44,11 @@ var (
 )
 
 // APIRequest is to get response for api request with http-headers
-func APIRequest(url string, headers map[string]string) (result []byte, err error) {
+func APIRequest(url string, method string, headers map[string]string) (result []byte, err error) {
 	customTransport := &(*http.DefaultTransport.(*http.Transport)) // make shallow copy
 	customTransport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequest(method, url, nil)
 	if err != nil {
 		return
 	}
@@ -72,6 +72,21 @@ func (cc myCollector) Describe(ch chan<- *prometheus.Desc) {
 	prometheus.DescribeByCollect(cc, ch)
 }
 
+func StopSingleServer(username string) {
+	headers := map[string]string{
+		"Authorization": "token " + *apiToken,
+	}
+	url := *apiHost + "/users/" + username + "/server"
+	_, apiErr := APIRequest(url, "DELETE", headers)
+
+	if apiErr != nil {
+		log.Println(apiErr)
+		return
+	}
+	log.Println("stopped " + username + "'s server")
+	return
+}
+
 func (cc *myCollector) GetActiveUser() (
 	activeUsers map[string]int64,
 ) {
@@ -79,7 +94,7 @@ func (cc *myCollector) GetActiveUser() (
 		"Authorization": "token " + *apiToken,
 	}
 
-	resBody, apiErr := APIRequest(*apiHost+"/users", headers)
+	resBody, apiErr := APIRequest(*apiHost+"/users", "GET", headers)
 
 	if apiErr != nil {
 		log.Println(apiErr)
@@ -90,11 +105,13 @@ func (cc *myCollector) GetActiveUser() (
 	err := json.Unmarshal(resBody, &resJSON)
 
 	activeUsers = map[string]int64{}
+
 	if err == nil {
 		for _, user := range resJSON {
 			if user.Server != "" {
 				t, _ := time.Parse(dateLayout, user.LastActivity)
-				activeUsers[user.Name] = t.UnixNano()
+				lastTimestamp := t.UnixNano()
+				activeUsers[user.Name] = lastTimestamp
 			}
 		}
 	} else {
@@ -106,14 +123,20 @@ func (cc *myCollector) GetActiveUser() (
 
 func (cc myCollector) Collect(ch chan<- prometheus.Metric) {
 	activeUsers := cc.GetActiveUser()
+	nowTimestamp := time.Now().UnixNano()
 
 	for userName, lastActivity := range activeUsers {
-		ch <- prometheus.MustNewConstMetric(
-			activeUserDesc,
-			prometheus.UntypedValue,
-			float64(lastActivity),
-			userName,
-		)
+		isActive := nowTimestamp-lastActivity < *waitHour*60*60*1e9
+		if isActive {
+			ch <- prometheus.MustNewConstMetric(
+				activeUserDesc,
+				prometheus.UntypedValue,
+				float64(lastActivity),
+				userName,
+			)
+		} else {
+			StopSingleServer(userName)
+		}
 	}
 }
 
