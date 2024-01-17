@@ -89,56 +89,76 @@ func StopSingleServer(username string) {
 
 func (cc *myCollector) GetActiveUser() (
 	activeUsers map[string]int64,
+	userCount int,
+	err error,
 ) {
 	headers := map[string]string{
 		"Authorization": "token " + *apiToken,
 	}
 
 	resBody, apiErr := APIRequest(*apiHost+"/users", "GET", headers)
-
 	if apiErr != nil {
 		log.Println(apiErr)
-		return
+		return nil, 0, apiErr
 	}
 
 	var resJSON = ResponseJSON{}
-	err := json.Unmarshal(resBody, &resJSON)
-
-	activeUsers = map[string]int64{}
-
-	if err == nil {
-		for _, user := range resJSON {
-			if user.Server != "" {
-				t, _ := time.Parse(dateLayout, user.LastActivity)
-				lastTimestamp := t.UnixNano()
-				activeUsers[user.Name] = lastTimestamp
-			}
-		}
-	} else {
+	err = json.Unmarshal(resBody, &resJSON)
+	if err != nil {
 		log.Println(err)
+		return nil, 0, err
 	}
 
-	return
+	activeUsers = map[string]int64{}
+	userCount = len(resJSON)
+	for _, user := range resJSON {
+		if user.Server != "" {
+			t, _ := time.Parse(dateLayout, user.LastActivity)
+			lastTimestamp := t.UnixNano()
+			activeUsers[user.Name] = lastTimestamp
+		}
+	}
+
+	return activeUsers, userCount, nil
 }
 
 func (cc myCollector) Collect(ch chan<- prometheus.Metric) {
-	activeUsers := cc.GetActiveUser()
+	activeUsers, userCount, err := cc.GetActiveUser()
 	nowTimestamp := time.Now().UnixNano()
 
-	for userName, lastActivity := range activeUsers {
-		isActive := nowTimestamp-lastActivity < *waitHour*60*60*1e9
-		if isActive {
-			ch <- prometheus.MustNewConstMetric(
-				activeUserDesc,
-				prometheus.UntypedValue,
-				float64(lastActivity),
-				userName,
-			)
-		} else {
-			StopSingleServer(userName)
+	if err != nil {
+		// エラー時にN/Aを送信
+		ch <- prometheus.MustNewConstMetric(
+			activeUserDesc,
+			prometheus.UntypedValue,
+			0, // 0を使用してN/Aを示す
+			"N/A",
+		)
+	} else if userCount == 0 {
+		// ユーザーが0の場合に0を送信
+		ch <- prometheus.MustNewConstMetric(
+			activeUserDesc,
+			prometheus.UntypedValue,
+			0, // 0を使用してユーザーがいないことを示す
+			"0",
+		)
+	} else {
+		for userName, lastActivity := range activeUsers {
+			isActive := nowTimestamp-lastActivity < *waitHour*60*60*1e9
+			if isActive {
+				ch <- prometheus.MustNewConstMetric(
+					activeUserDesc,
+					prometheus.UntypedValue,
+					float64(lastActivity),
+					userName,
+				)
+			} else {
+				StopSingleServer(userName)
+			}
 		}
 	}
 }
+
 
 func main() {
 	flag.Parse()
