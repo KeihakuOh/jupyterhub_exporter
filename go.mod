@@ -1,4 +1,4 @@
-module github.com/nshun/jupyterhub_exporter
+module github.com/KeihakuOh/jupyterhub_exporter
 
 go 1.13
 
